@@ -1,0 +1,58 @@
+name = "tangent"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+main = "worker.ts"
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# OG-unfurl routes are added so they reach the worker BEFORE the SPA asset
+# fallback (the OG middleware injects meta). Paths outside this set are served
+# straight from assets.
+run_worker_first = [
+  "/api/*", "/ws/*", "/internal/*", "/v1/*", "/_deepspace/*",
+  "/i/*", "/r/*", "/c/*", "/f/*", "/today",
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AppRecordRoom", "AppYjsRoom", "AppCanvasRoom", "AppPresenceRoom", "AppCronRoom", "AppJobRoom", "AppGameRoom", "AppMatchmakerRoom"]
+
+[durable_objects]
+bindings = [
+  { name = "RECORD_ROOMS", class_name = "AppRecordRoom" },
+  { name = "YJS_ROOMS", class_name = "AppYjsRoom" },
+  { name = "CANVAS_ROOMS", class_name = "AppCanvasRoom" },
+  { name = "PRESENCE_ROOMS", class_name = "AppPresenceRoom" },
+  { name = "CRON_ROOMS", class_name = "AppCronRoom" },
+  { name = "JOB_ROOMS", class_name = "AppJobRoom" },
+  { name = "GAME_ROOMS", class_name = "AppGameRoom" },
+  { name = "MATCHMAKER_ROOMS", class_name = "AppMatchmakerRoom" },
+]
+
+# Article render cache (global/shared KV). Key `art:v1:<canonicalTitle>`.
+# `id = "auto"` -> DeepSpace provisions on deploy; `title` is verbatim.
+[[kv_namespaces]]
+binding = "ARTICLE_CACHE"
+id = "auto"
+title = "tangent-article-cache"
+
+# Share cards (PNG). `bucket_name = "auto"` -> provisioned on deploy as
+# app-<appName>-cards.
+[[r2_buckets]]
+binding = "CARDS"
+bucket_name = "auto"
+
+[vars]
+APP_NAME = "tangent"
+
+[dev]
+port = 8780
+inspector_port = 9237
+
+# Secrets (set via `wrangler secret put` or written by `deepspace dev`):
+#   AUTH_JWT_PUBLIC_KEY
+#   AUTH_JWT_ISSUER
+#   AUTH_WORKER_URL
+#   OWNER_USER_ID

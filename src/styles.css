@@ -1,0 +1,351 @@
+@import "tailwindcss" source(none);
+@import "./themes.css";
+
+/* Scan local source + SDK components for Tailwind class usage */
+@source "./**/*.{ts,tsx}";
+@source "../node_modules/deepspace/dist/**/*.js";
+
+/*
+ * Theming — pure shadcn/ui CSS variables with [data-theme] selectors.
+ *
+ * The @theme block below holds the default theme (slate). All other themes
+ * live in `themes.css` as `[data-theme="<id>"]` override blocks. Switching
+ * themes = changing the data-theme attribute on <html> in index.html. No
+ * JS, no FOUC.
+ *
+ * Status colors (success, warning, info) are intentionally NOT themed —
+ * they stay consistent across every preset.
+ */
+@theme {
+  /* shadcn core tokens — slate (default): neutral gray on near-black, indigo accent */
+  --color-background: #0a0a0a;
+  --color-foreground: #e8eaed;
+  --color-card: #161616;
+  --color-card-foreground: #e8eaed;
+  --color-popover: #161616;
+  --color-popover-foreground: #e8eaed;
+  --color-primary: #818cf8;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #1e1e1e;
+  --color-secondary-foreground: #e8eaed;
+  --color-muted: #1e1e1e;
+  --color-muted-foreground: #9ca3af;
+  --color-accent: #262626;
+  --color-accent-foreground: #e8eaed;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: rgba(60, 64, 67, 0.6);
+  --color-input: rgba(60, 64, 67, 0.6);
+  --color-ring: #818cf8;
+  --radius: 0.5rem;
+
+  /* Status colors — constant across all themes */
+  --color-success: #10b981;
+  --color-success-foreground: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-foreground: #ffffff;
+  --color-info: #3b82f6;
+  --color-info-foreground: #ffffff;
+
+  /*
+   * Shadows — slate (default). Each theme in themes.css tunes these.
+   *
+   * Toned down 2026-05: previous values were 8px/12px offset with
+   * 32px/40px blur which read as a heavy halo under every Card on
+   * the page. New values are Linear/Stripe-style: barely-there at
+   * rest, slightly more present on hover.
+   *
+   * IMPORTANT: starter components (`Card`, `Dialog`, `CardGrid`,
+   * `Navigation`, `Toast`) intentionally use literal shadow values
+   * via `shadow-[…]` arbitrary-value classes, NOT the
+   * `shadow-card` / `shadow-card-hover` token classes Tailwind v4
+   * generates from this @theme block. Why: Tailwind's @theme directive
+   * compiles these tokens into the utility-class definitions at build
+   * time, and runtime [data-theme] overrides don't always cancel the
+   * baked baseline cleanly — apps switching themes were getting the
+   * slate value carried forward on the compiled `shadow-card` class.
+   * Sidestepping the token system in starter components is the
+   * deterministic fix. See docs/platform/theming-shadows.md.
+   */
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.12);
+  --shadow-card-hover: 0 2px 8px 0 rgba(0, 0, 0, 0.16);
+
+  /* Animations */
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+
+  /* Backward-compatibility aliases */
+  --color-surface: var(--color-background);
+  --color-surface-elevated: var(--color-card);
+  --color-surface-overlay: var(--color-muted);
+  --color-surface-input: rgba(30, 41, 59, 0.6);
+  --color-content: var(--color-foreground);
+  --color-content-secondary: var(--color-muted-foreground);
+  --color-content-muted: #64748b;
+  --color-content-inverse: #0f172a;
+  --color-border-strong: rgba(71, 85, 105, 0.5);
+  --color-border-focus: var(--color-ring);
+  --color-primary-hover: #6d7bf5;
+  --color-primary-muted: rgba(129, 140, 248, 0.2);
+  --color-primary-border: rgba(129, 140, 248, 0.3);
+  --color-danger: var(--color-destructive);
+  --color-danger-muted: rgba(239, 68, 68, 0.2);
+  --color-danger-border: rgba(239, 68, 68, 0.4);
+  --color-success-muted: rgba(16, 185, 129, 0.2);
+  --color-success-border: rgba(16, 185, 129, 0.4);
+  --color-warning-muted: rgba(245, 158, 11, 0.2);
+  --color-warning-border: rgba(245, 158, 11, 0.4);
+  --color-info-muted: rgba(59, 130, 246, 0.2);
+  --color-info-border: rgba(59, 130, 246, 0.4);
+}
+
+/* Theme override blocks live in `themes.css` — imported above. */
+
+/*
+ * Animation keyframes for shadcn components.
+ * These replace the tailwindcss-animate plugin which is not compatible with Tailwind v4.
+ */
+@keyframes animate-in {
+  from { opacity: var(--tw-enter-opacity, 1); transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1)) rotate(var(--tw-enter-rotate, 0)); }
+}
+
+@keyframes animate-out {
+  to { opacity: var(--tw-exit-opacity, 1); transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0)); }
+}
+
+@utility animate-in {
+  animation-name: animate-in;
+  animation-duration: 150ms;
+  --tw-enter-opacity: initial;
+  --tw-enter-scale: initial;
+  --tw-enter-translate-x: initial;
+  --tw-enter-translate-y: initial;
+  --tw-enter-rotate: initial;
+}
+
+@utility animate-out {
+  animation-name: animate-out;
+  animation-duration: 150ms;
+  --tw-exit-opacity: initial;
+  --tw-exit-scale: initial;
+  --tw-exit-translate-x: initial;
+  --tw-exit-translate-y: initial;
+  --tw-exit-rotate: initial;
+}
+
+@utility fade-in-0 { --tw-enter-opacity: 0; }
+@utility fade-out-0 { --tw-exit-opacity: 0; }
+@utility zoom-in-95 { --tw-enter-scale: .95; }
+@utility zoom-out-95 { --tw-exit-scale: .95; }
+@utility slide-in-from-top-2 { --tw-enter-translate-y: -0.5rem; }
+@utility slide-in-from-bottom-2 { --tw-enter-translate-y: 0.5rem; }
+@utility slide-in-from-left-2 { --tw-enter-translate-x: -0.5rem; }
+@utility slide-in-from-right-2 { --tw-enter-translate-x: 0.5rem; }
+@utility slide-out-to-top-2 { --tw-exit-translate-y: -0.5rem; }
+@utility slide-out-to-bottom-2 { --tw-exit-translate-y: 0.5rem; }
+@utility slide-out-to-left-2 { --tw-exit-translate-x: -0.5rem; }
+@utility slide-out-to-right-2 { --tw-exit-translate-x: 0.5rem; }
+
+
+/*
+ * Custom base styles — must be in @layer base so utility classes can override.
+ */
+@layer base {
+  html {
+    /* Default to dark for native form controls (calendar icons, scrollbars).
+     * Light themes opt into `color-scheme: light` in themes.css. */
+    color-scheme: dark;
+  }
+
+  html, body, #root {
+    min-height: 100vh;
+    background-color: var(--color-background);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+    color: var(--color-foreground);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 0.25rem;
+    background-color: var(--color-border);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-muted-foreground);
+  }
+
+  /* Selection styling */
+  ::selection {
+    background-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+
+  /*
+   * Focus indication is intentionally NOT applied app-wide via a
+   * `*:focus-visible` rule. Doing so paints a colored outline onto
+   * every focusable element on the page — including programmatically
+   * focusable containers like Radix DismissableLayer wrappers,
+   * dialog overlays, and any element with `tabindex={-1}` used for
+   * scroll containment. The result reads as "the entire panel /
+   * dialog is selected" the moment a child button is clicked.
+   *
+   * Per-component focus indicators (e.g. shadcn's
+   * `focus-visible:ring-1` on Button, `focus-visible:border-ring` on
+   * Input / Textarea / Select) are sufficient for keyboard
+   * accessibility and don't bleed onto containers.
+   *
+   * If you DO need a global indicator for very keyboard-heavy apps,
+   * scope it tightly — e.g. only to interactive elements:
+   *
+   *   a:focus-visible,
+   *   button:focus-visible,
+   *   [role="button"]:focus-visible,
+   *   input:focus-visible,
+   *   select:focus-visible,
+   *   textarea:focus-visible {
+   *     outline: 2px solid var(--color-primary);
+   *     outline-offset: 2px;
+   *   }
+   *
+   * — never `*`.
+   */
+
+  /* Prevent 300ms tap delay on mobile */
+  a, button, [role="button"], input, select, textarea {
+    touch-action: manipulation;
+  }
+
+  /* Tangent brand body font (the brand fonts are loaded in index.html). */
+  [data-theme="tangent"] body {
+    font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
+  }
+}
+
+/*
+ * Tangent motion system — the design's keyframes, made globally available so
+ * any later UI wave can use them (the line, presence ticks, par reveal, finish,
+ * 3-2-1 start). Lifted verbatim from docs/founder/design-source/Tangent.dc.html.
+ * The article never animates; reduced-motion makes everything instant.
+ */
+@keyframes lineFlow { to { stroke-dashoffset: -32; } }
+@keyframes drawIn { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+@keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes popIn { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.25); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes targetGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 46, 126, 0.55); } 50% { box-shadow: 0 0 0 10px rgba(255, 46, 126, 0); } }
+@keyframes nodePulse { 0%, 100% { r: 7; } 50% { r: 9; } }
+@keyframes ringPulse { 0% { transform: scale(0.6); opacity: 0.9; } 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes spinSlow { to { transform: rotate(360deg); } }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes rise { 0% { transform: translateY(14px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+@keyframes countPop { 0% { transform: scale(2.4); opacity: 0; } 30% { opacity: 1; } 70% { transform: scale(1); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes burst { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(0.2); opacity: 0; } }
+@keyframes shimmer { to { background-position: 200% 0; } }
+@keyframes wob { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+@keyframes inkSpread { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 0.92; } }
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/*
+ * Tangent component classes (ADDITIVE — these do not touch the theme tokens or
+ * keyframes above). They cover the things inline styles cannot: :hover / :active
+ * states, and the typography of the server-rendered article body (servedHtml),
+ * where only `<a class="tg-link" data-tg-to="Title">` is interactive and every
+ * other element is visibly inert.
+ */
+
+/* Press + lift micro-interactions for buttons / cards. */
+.tg-press { transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease; }
+.tg-press:active { transform: translateY(1px) scale(0.99); }
+.tg-lift { transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.2s ease; }
+.tg-lift:hover { transform: translateY(-3px); }
+
+/* The in-article LEGAL link — the only clickable thing in the prose. */
+.tg-link {
+  color: var(--indigo);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border-bottom: 2px solid rgba(75, 92, 255, 0.3);
+  border-radius: 4px;
+  transition: background 0.12s, color 0.12s;
+}
+.tg-link:hover { background: rgba(75, 92, 255, 0.12); }
+
+/* The target link, glowing pink when the player is one hop away. */
+.tg-link.tg-target {
+  color: #fff;
+  background: var(--pink);
+  font-weight: 700;
+  padding: 1px 8px;
+  border-bottom: none;
+  white-space: nowrap;
+  animation: targetGlow 1.3s infinite;
+}
+
+/* Server-rendered article body typography + inert everything-else. */
+.tg-article-body { font-size: 18px; line-height: 1.72; color: #2c2a48; }
+.tg-article-body p { margin: 0 0 18px; text-wrap: pretty; }
+.tg-article-body h2,
+.tg-article-body h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 26px 0 10px;
+}
+.tg-article-body h2 { font-size: 24px; }
+.tg-article-body h3 { font-size: 19px; }
+.tg-article-body ul,
+.tg-article-body ol { margin: 0 0 18px; padding-left: 22px; }
+.tg-article-body li { margin: 0 0 8px; }
+.tg-article-body img { max-width: 100%; height: auto; border-radius: 12px; }
+.tg-article-body b, .tg-article-body strong { color: var(--ink); }
+/* Any stray non-legal anchor the server didn't strip reads as plain inert ink. */
+.tg-article-body a:not(.tg-link) {
+  color: inherit;
+  text-decoration: none;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Horizontal scroll tray (chaos powerups, mobile rails) without a visible bar. */
+.tg-noscroll { scrollbar-width: none; -ms-overflow-style: none; }
+.tg-noscroll::-webkit-scrollbar { display: none; }
+
+/* Race body: single column on phones, article + presence rail on desktop. */
+.tg-race-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 44px);
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .tg-race-grid { grid-template-columns: minmax(0, 1fr) 248px; }
+}
+/* The presence rail only sticks on desktop; on mobile it sits under the article. */
+.tg-race-aside { position: static; }
+@media (min-width: 900px) {
+  .tg-race-aside { position: sticky; top: 120px; }
+}
