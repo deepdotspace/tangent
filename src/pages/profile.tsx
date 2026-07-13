@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AuthOverlay } from 'deepspace'
+import { AuthOverlay, signOut } from 'deepspace'
 import { PageSurface, BackButton, StatCard, EmptyBlock, C, FONT } from '../components/tangent'
 import { useIdentity, useMyRuns, useMyStats, todayUtc, type RunRow } from '../game/client'
 import { tierForRating } from '../game/constants'
@@ -50,6 +50,15 @@ export default function ProfilePage() {
             </span>
           </div>
         </div>
+        {identity.isSignedIn ? (
+          <button
+            onClick={() => signOut()}
+            className="tg-press"
+            style={{ marginLeft: 'auto', alignSelf: 'flex-start', background: '#fff', boxShadow: `inset 0 0 0 1.5px ${C.hairline}`, border: 'none', borderRadius: 11, padding: '9px 14px', fontFamily: FONT.ui, fontWeight: 600, fontSize: 13, color: C.mute, cursor: 'pointer' }}
+          >
+            Sign out
+          </button>
+        ) : null}
       </div>
 
       {!identity.isSignedIn ? (
