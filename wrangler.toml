@@ -45,6 +45,7 @@ binding = "CARDS"
 bucket_name = "auto"
 
 [vars]
+DEEPSPACE_APP_ID = "tangent"
 APP_NAME = "tangent"
 
 [dev]
