@@ -19,7 +19,7 @@ export const friendshipSchema: CollectionSchema = {
     // [aUserId, bUserId] — backs the `collaborator` permission rule
     { name: 'participants', storage: 'text', interpretation: { kind: 'json' } },
     { name: 'status', storage: 'text', interpretation: { kind: 'select', options: ['pending', 'accepted'] } },
-    { name: 'requestedBy', storage: 'text', interpretation: 'plain' },
+    { name: 'requestedBy', storage: 'text', interpretation: 'plain', userBound: true, immutable: true },
   ],
   uniqueOn: ['aUserId', 'bUserId'],
   ownerField: 'requestedBy',
