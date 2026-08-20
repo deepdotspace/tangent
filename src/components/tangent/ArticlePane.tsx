@@ -6,7 +6,7 @@
  * itself never animates (the ink-splat chaos overlay is the only exception).
  */
 
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import { C, FONT } from './primitives'
 import type { DemoArticle } from '../../game/client'
 
@@ -22,9 +22,30 @@ export interface ArticlePaneProps {
   onHop: (title: string) => void
 }
 
-export function ArticlePane(props: ArticlePaneProps) {
+function ArticlePaneImpl(props: ArticlePaneProps) {
   const { title, cat, html, demo, targetTitle, oneAway, loading, inkSplat, onHop } = props
   const htmlRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * React compares `dangerouslySetInnerHTML` by OBJECT IDENTITY, not by the
+   * `__html` string, so a fresh `{ __html }` literal re-assigns `innerHTML` and
+   * rebuilds every node in the article on EVERY re-render. The race screen
+   * re-renders continuously (the live room ticks at 6 Hz; the async par-ghost
+   * every 950 ms), so the link under the cursor was being destroyed and
+   * recreated several times a second: `:hover` flickered, and a click whose
+   * mousedown and mouseup straddled a rebuild produced no `click` event at all,
+   * which is why links needed a second click. Keying the object to the string
+   * keeps the DOM — and the reader's place in it — stable.
+   */
+  const htmlProp = useMemo(() => (html ? { __html: html } : undefined), [html])
+
+  // The delegated listener must survive re-renders without capturing a stale
+  // `onHop`: the callers rebuild that closure on every render, so the effect is
+  // keyed to `html` alone and reads the live callback through a ref.
+  const onHopRef = useRef(onHop)
+  useEffect(() => {
+    onHopRef.current = onHop
+  })
 
   // Delegate clicks on the served HTML to legal links only.
   useEffect(() => {
@@ -37,11 +58,11 @@ export function ArticlePane(props: ArticlePaneProps) {
       if (!link) return
       e.preventDefault()
       const to = link.getAttribute('data-tg-to')
-      if (to) onHop(to)
+      if (to) onHopRef.current(to)
     }
     root.addEventListener('click', handler)
     return () => root.removeEventListener('click', handler)
-  }, [html, onHop])
+  }, [html])
 
   // Mark the target link so it glows when reachable.
   useEffect(() => {
@@ -85,13 +106,20 @@ export function ArticlePane(props: ArticlePaneProps) {
       {loading ? (
         <SkeletonProse />
       ) : html ? (
-        <div ref={htmlRef} className="tg-article-body" dangerouslySetInnerHTML={{ __html: html }} />
+        <div ref={htmlRef} className="tg-article-body" dangerouslySetInnerHTML={htmlProp} />
       ) : demo ? (
         <DemoProse demo={demo} targetTitle={targetTitle} oneAway={oneAway} onHop={onHop} />
       ) : null}
     </article>
   )
 }
+
+/**
+ * Memoised: the article is the heaviest subtree on the screen and none of its
+ * inputs change on a presence/clock tick. Callers pass a `useCallback`-stable
+ * `onHop`, so this skips the whole subtree on every unrelated re-render.
+ */
+export const ArticlePane = memo(ArticlePaneImpl)
 
 function DemoProse({ demo, targetTitle, oneAway, onHop }: { demo: DemoArticle; targetTitle: string; oneAway: boolean; onHop: (t: string) => void }) {
   return (
