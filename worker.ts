@@ -32,6 +32,7 @@ import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
 import { schemas } from './src/schemas.js'
 import { integrations } from './src/integrations.js'
 import { getArticle } from './src/server/article-pipeline.js'
+import { cronRoomName, createCronArmer, executionCtxOrNull } from './src/server/cron-arm.js'
 import { TangentGameRoom } from './src/game/app-game-room.js'
 import { TangentMatchmakerRoom } from './src/game/app-matchmaker-room.js'
 
@@ -219,6 +220,55 @@ export type AppContext = { Bindings: Env }
 
 const app = new Hono<AppContext>()
 app.use('/api/*', cors())
+
+// ---------------------------------------------------------------------------
+// Arm the cron room
+//
+// Without this, roll-daily in src/cron.ts never runs: CronRoom only schedules
+// its first alarm when the DO is first touched, and nothing else in Tangent
+// ever touches it (/ws/cron/:roomId exists but no page opens it). See
+// src/server/cron-arm.ts for the full why.
+//
+// Mounted on /api/* rather than *. Arming is a one-shot event that
+// self-perpetuates once it lands, so it does not need the widest possible
+// request surface — it needs requests that mean somebody is actually using the
+// app. Every real session hits /api/* immediately (session check, actions,
+// /api/article). `*` would be actively wrong here: wrangler.toml routes the
+// social-unfurl paths — /today, /i/:code, /r/:runId, /c/:id, /f/:code — to the
+// worker ahead of the asset fallback, and those exist to be fetched by Slack,
+// Twitter and Facebook crawlers. A link preview is not a signal that the app
+// is in use, and `*` would also fire the ping on the first stylesheet request
+// into every new isolate.
+//
+// It deliberately does not exclude anonymous callers, even though Tangent is
+// playable without signup. Arming grants strictly less than an anonymous
+// request already can: /api/actions/startAsyncRace with mode 'daily' calls
+// getOrCreateTodayDaily directly, which is the whole of what roll-daily does.
+// The task makes no integration or AI call and sends nothing outbound, so
+// there is no owner-billed work to gate. Revisit if that changes — the
+// streak-at-risk task sketched in src/cron.ts would send email.
+// ---------------------------------------------------------------------------
+
+const armCron = createCronArmer()
+
+app.use('/api/*', async (c, next) => {
+  // Skip arming when there is no ExecutionContext — no background-work channel
+  // to defer onto, and a route test has no business starting a cron. Checked
+  // before the latch so a test run can never consume the isolate's one arming
+  // attempt without pinging.
+  const background = executionCtxOrNull(() => c.executionCtx)
+
+  if (background) {
+    const arming = armCron(() => {
+      const ns = c.env.CRON_ROOMS
+      return ns.get(ns.idFromName(cronRoomName(c.env.APP_NAME))).fetch('https://cron-arm/ping')
+    })
+    // waitUntil, never await: arming must not sit in front of the response.
+    if (arming) background.waitUntil(arming)
+  }
+
+  await next()
+})
 
 // ---------------------------------------------------------------------------
 // Auth
