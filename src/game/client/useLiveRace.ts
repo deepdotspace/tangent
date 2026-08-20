@@ -12,7 +12,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAuth, useGameRoom } from 'deepspace'
+import { useAuth } from 'deepspace'
+import { useGameRoom } from '../../vendor/deepspace-game/useGameRoom'
 import { useGuestId, guestDisplayName } from './guest'
 import { invokeAction } from './actionClient'
 import { COUNTDOWN_SEC, TICK_RATE } from '../constants'
