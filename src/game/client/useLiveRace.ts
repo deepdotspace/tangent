@@ -12,7 +12,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAuth, useGameRoom } from 'deepspace'
+import { useAuth } from 'deepspace'
+import { useGameRoom } from '../../vendor/deepspace-game/useGameRoom'
 import { useGuestId, guestDisplayName } from './guest'
 import { invokeAction } from './actionClient'
 import { COUNTDOWN_SEC, TICK_RATE } from '../constants'
@@ -168,14 +169,19 @@ export function useLiveRoom(roomId: string, mode: Mode): LiveRace {
     }
   }, [room.state, room.tick, mode])
 
+  // Depend on `sendInput` (itself stable until write access flips), NOT on the
+  // whole `room` object — useGameRoom returns a fresh object literal every
+  // render, so keying these on `room` made them change identity 6 times a second
+  // and defeated every downstream memo.
+  const sendInput = room.sendInput
   const navigate = useCallback((fromTitle: string, toTitle: string) => {
     seqRef.current += 1
-    room.sendInput('navigate', { seq: seqRef.current, fromTitle, toTitle })
-  }, [room])
+    sendInput('navigate', { seq: seqRef.current, fromTitle, toTitle })
+  }, [sendInput])
 
   const powerup = useCallback((ptype: ChaosEffect, target?: string) => {
-    room.sendInput('powerup', { ptype, target })
-  }, [room])
+    sendInput('powerup', { ptype, target })
+  }, [sendInput])
 
   return {
     state,

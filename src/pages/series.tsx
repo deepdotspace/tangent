@@ -1,7 +1,7 @@
 /** Series select — a grid of evergreen themed gauntlets (cumulative clicks). */
 
 import { useNavigate } from 'react-router-dom'
-import { LightScreen, TopBar, BackButton, LoadingBlock, C, FONT } from '../components/tangent'
+import { LightScreen, TopBar, BackButton, LoadingBlock, PrimaryButton, C, FONT } from '../components/tangent'
 import { useSeriesList, useMyStats } from '../game/client'
 
 interface SeriesTile {
@@ -13,7 +13,11 @@ interface SeriesTile {
   fg: string
 }
 
-// Evergreen themed series shown when the seed set is not yet loaded.
+/**
+ * Placeholder gauntlets for the DEV / `?demo` sandbox only. Their ids match no
+ * seeded `series` record, so in production they would send the player into a
+ * race the server cannot start; there they are replaced by an empty state.
+ */
 const DEMO_SERIES: SeriesTile[] = [
   { id: 'demo-science', title: 'The Sciences', theme: 'physics to biology', length: 5, bg: 'linear-gradient(135deg,#4b5cff,#16cfd6)', fg: '#fff' },
   { id: 'demo-music', title: 'Sound & Stage', theme: 'jazz to pop', length: 5, bg: 'linear-gradient(135deg,#ff2e7e,#ff5a3c)', fg: '#fff' },
@@ -37,17 +41,20 @@ export default function SeriesPage() {
   const list = useSeriesList()
   const streak = useMyStats().currentStreak
 
-  const tiles: SeriesTile[] =
-    list.status === 'ready' && list.rows.length > 0
-      ? list.rows.map((r, i) => ({
-          id: r.id,
-          title: r.data.title,
-          theme: r.data.themeTag ?? 'themed line set',
-          length: r.data.length ?? 5,
-          bg: BGS[i % BGS.length],
-          fg: i % 6 === 3 ? '#0a3e40' : i % 6 === 5 ? '#2a4d00' : '#fff',
-        }))
-      : DEMO_SERIES
+  // The demo engine is only allowed to stand in for the server in DEV / `?demo`
+  // (the same gate useAsyncRace applies); in production an unseeded collection
+  // must read as empty rather than offer tiles that cannot start a race.
+  const allowDemo = import.meta.env.DEV || new URLSearchParams(window.location.search).has('demo')
+
+  const seeded: SeriesTile[] = list.rows.map((r, i) => ({
+    id: r.id,
+    title: r.data.title,
+    theme: r.data.themeTag ?? 'themed line set',
+    length: r.data.length ?? 5,
+    bg: BGS[i % BGS.length],
+    fg: i % 6 === 3 ? '#0a3e40' : i % 6 === 5 ? '#2a4d00' : '#fff',
+  }))
+  const tiles: SeriesTile[] = seeded.length > 0 ? seeded : allowDemo ? DEMO_SERIES : []
 
   return (
     <LightScreen>
@@ -61,6 +68,14 @@ export default function SeriesPage() {
 
         {list.status === 'loading' ? (
           <LoadingBlock label="Loading the gauntlets" />
+        ) : tiles.length === 0 ? (
+          <div style={{ background: '#fff', borderRadius: 22, boxShadow: `inset 0 0 0 1.5px ${C.hairline}`, padding: 'clamp(24px,4vw,40px)', maxWidth: 480 }}>
+            <div style={{ fontFamily: FONT.display, fontWeight: 800, fontSize: 22, color: C.ink, marginBottom: 6 }}>No gauntlets yet</div>
+            <div style={{ fontSize: 14.5, color: C.mute, lineHeight: 1.55, marginBottom: 18 }}>
+              The themed sets are still being curated. Race the daily line or a solo line in the meantime.
+            </div>
+            <PrimaryButton onClick={() => navigate('/home')}>Back to modes</PrimaryButton>
+          </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
             {tiles.map((s) => (

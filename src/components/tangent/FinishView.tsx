@@ -23,6 +23,8 @@ export interface FinishViewProps {
   showDailyStats?: boolean
   onDailyStats?: () => void
   restartLabel?: string
+  /** Optional standing line, e.g. a series leg count and running total. */
+  note?: string
 }
 
 interface Copy {
@@ -102,7 +104,7 @@ export function FinishView(props: FinishViewProps) {
     yourTitles, parTitles, clicks, par, reached,
     shareText, shareLabel, onCopyShare, onRestart, onHome,
     showDailyStats, onDailyStats, restartLabel = 'Run it again',
-    placement, won, timeMs,
+    placement, won, timeMs, note,
   } = props
   const copy = placement
     ? resolvePlacementCopy(clicks, reached, !!won, timeMs)
@@ -113,6 +115,9 @@ export function FinishView(props: FinishViewProps) {
       <Confetti count={copy.confetti} />
       <div style={{ maxWidth: 760, margin: '0 auto', position: 'relative', zIndex: 2, textAlign: 'center' }}>
         <div style={{ fontFamily: FONT.mono, fontSize: 12, letterSpacing: '.2em', textTransform: 'uppercase', color: C.mute, marginTop: 10 }}>{copy.kicker}</div>
+        {note ? (
+          <div style={{ fontFamily: FONT.mono, fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', color: C.pink, fontWeight: 700, marginTop: 8 }}>{note}</div>
+        ) : null}
         <h1 style={{ fontFamily: FONT.display, fontWeight: 800, fontSize: 'clamp(44px,11vw,104px)', lineHeight: 0.92, letterSpacing: '-.03em', margin: '6px 0 0', color: C.ink }}>{copy.headline}</h1>
         <p style={{ fontSize: 'clamp(16px,3vw,21px)', color: '#3a3860', maxWidth: 440, margin: '14px auto 0', lineHeight: 1.45 }}>{copy.sub}</p>
 

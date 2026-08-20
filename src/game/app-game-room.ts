@@ -13,8 +13,8 @@
  * server-authoritative — the client is never trusted for identity/moves/timing.
  */
 
-import { GameRoom, MSG } from 'deepspace/worker'
-import type { GameInput, Player } from 'deepspace/worker'
+import { GameRoom, MSG } from '../vendor/deepspace-game/game-room'
+import type { GameInput, Player } from '../vendor/deepspace-game/game-room'
 import { TICK_RATE, ROOM_MIN, ROOM_MAX, ROUND_CAP_SEC } from './constants'
 import {
   newEngineCtx,

@@ -1,7 +1,9 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import generouted from '@generouted/react-router/plugin'
 import { cloudflare } from '@cloudflare/vite-plugin'
+import { deepspaceBuild } from 'deepspace/build'
 import checker from 'vite-plugin-checker'
 
 export default defineConfig({
@@ -9,6 +11,11 @@ export default defineConfig({
     react(),
     generouted(),
     cloudflare(),
+    // SDK-owned build wiring: the build-time app id define, the client dedupe
+    // hint, and deleting the preview `.dev.vars` the Cloudflare plugin drops
+    // beside the built worker (it contains APP_OWNER_JWT / AUTH_JWT_PUBLIC_KEY
+    // in plaintext).
+    deepspaceBuild({ appDir: fileURLToPath(new URL('.', import.meta.url)) }),
     // Runs the Rules of Hooks lint (see eslint.config.js) automatically, so
     // there's no separate step to remember: a violation surfaces as an overlay
     // during `deepspace dev` and fails the build during `deepspace deploy`.

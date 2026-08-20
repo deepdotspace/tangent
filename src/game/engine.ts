@@ -13,7 +13,7 @@
  *    order, and `winner` is set ONCE and never overwritten (spec/7 §5).
  */
 
-import type { GameInput } from 'deepspace/worker'
+import type { GameInput } from '../vendor/deepspace-game/game-room'
 import { normalizeTitleKey, toCanonicalTitle } from '../server/article-pipeline'
 import {
   COUNTDOWN_SEC,
