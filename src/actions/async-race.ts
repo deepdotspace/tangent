@@ -26,6 +26,14 @@ import {
   utcDateString,
   type HistogramData,
 } from '../server/streak'
+import {
+  resolveSeriesLeg,
+  applyLegResult,
+  normalizePairIds,
+  normalizeLegResults,
+  sumLegs,
+  type LegResult,
+} from '../server/series'
 import type {
   PathEntry,
   StartAsyncResult,
@@ -63,6 +71,28 @@ interface RunData {
   status: string
   parAtPlay: number
   finishedAt?: string
+  [key: string]: unknown
+}
+
+interface SeriesData {
+  title: string
+  themeTag?: string
+  length?: number
+  // json-interpreted: comes back as a real array OR the raw JSON string, so it
+  // always goes through normalizePairIds before use.
+  pairIds?: unknown
+  difficultyArc?: unknown
+  [key: string]: unknown
+}
+
+interface SeriesAttemptData {
+  subjectId: string
+  seriesId: string
+  legResults: unknown
+  totalClicks: number
+  totalTimeMs: number
+  completed: number
+  status: string
   [key: string]: unknown
 }
 
@@ -202,6 +232,185 @@ async function pickSoloPair(ctx: ActionContext<Env>, difficulty: string): Promis
   return pool[Math.floor(Math.random() * pool.length)].recordId
 }
 
+// ── series attempts (leg resolution + fold) ───────────────────────────────
+
+/**
+ * The caller's in-progress attempt at a series, or null.
+ *
+ * ALWAYS located by query on (subjectId, seriesId, status) — never by a synthetic
+ * record id, because `tools.create` may ignore a supplied recordId and mint its
+ * own. Updates use the recordId the platform handed back.
+ */
+async function findAttempt(
+  ctx: ActionContext<Env>,
+  seriesId: string,
+  status: 'active' | 'final',
+): Promise<{ recordId: string; data: SeriesAttemptData } | null> {
+  const q = await ctx.tools.query<SeriesAttemptData>('seriesAttempt', {
+    where: { subjectId: ctx.userId, seriesId, status },
+    limit: 1,
+  })
+  if (!q.success || q.data.records.length === 0) return null
+  const rec = q.data.records[0]
+  return { recordId: rec.recordId, data: rec.data }
+}
+
+/** Open a fresh attempt at leg 0. Returns the platform-assigned record id. */
+async function createAttempt(ctx: ActionContext<Env>, seriesId: string): Promise<string | null> {
+  const created = await ctx.tools.create('seriesAttempt', {
+    subjectId: ctx.userId,
+    seriesId,
+    legResults: [],
+    totalClicks: 0,
+    totalTimeMs: 0,
+    completed: 0,
+    status: 'active',
+  })
+  return created.success ? created.data.recordId : null
+}
+
+interface SeriesLegStart {
+  pairId: string
+  legIndex: number
+  legCount: number
+  seriesTitle: string
+}
+
+/**
+ * Resolve WHICH leg of `seriesId` this caller plays next, creating or rotating
+ * their attempt as needed. Returns null when the series row is missing or has no
+ * usable legs so the caller can fail with a clear message instead of crashing.
+ */
+async function startSeriesLeg(
+  ctx: ActionContext<Env>,
+  seriesId: string,
+): Promise<SeriesLegStart | null> {
+  const rec = await ctx.tools.get<SeriesData>('series', seriesId)
+  if (!rec.success) return null
+  const series = rec.data.record.data
+  const pairIds = normalizePairIds(series.pairIds)
+  if (pairIds.length === 0) return null
+  const seriesTitle = typeof series.title === 'string' ? series.title : ''
+
+  const attempt = await findAttempt(ctx, seriesId, 'active')
+  let legResults: LegResult[] = attempt ? normalizeLegResults(attempt.data.legResults) : []
+
+  if (!attempt) {
+    await createAttempt(ctx, seriesId)
+  } else if (resolveSeriesLeg(pairIds, legResults).completed) {
+    // Replaying a finished gauntlet: retire the completed attempt (status 'final')
+    // and open a FRESH active one at leg 0, so the old totals stay intact on the
+    // board and the replay starts from the first line rather than dead-ending.
+    await ctx.tools.update<SeriesAttemptData>('seriesAttempt', attempt.recordId, {
+      status: 'final',
+      completed: 1,
+    })
+    await createAttempt(ctx, seriesId)
+    legResults = []
+  }
+
+  const progress = resolveSeriesLeg(pairIds, legResults)
+  if (!progress.pairId) return null
+  return {
+    pairId: progress.pairId,
+    legIndex: progress.legIndex,
+    legCount: progress.legCount,
+    seriesTitle,
+  }
+}
+
+/**
+ * Fold a settled leg into the caller's attempt. Idempotent on runId (see
+ * applyLegResult), and totals are always re-summed from legResults so a repeat
+ * fold can never inflate them.
+ */
+async function foldSeriesLeg(
+  ctx: ActionContext<Env>,
+  seriesId: string,
+  leg: LegResult,
+): Promise<void> {
+  const rec = await ctx.tools.get<SeriesData>('series', seriesId)
+  if (!rec.success) return
+  const pairIds = normalizePairIds(rec.data.record.data.pairIds)
+  if (pairIds.length === 0) return
+
+  const attempt = await findAttempt(ctx, seriesId, 'active')
+  // No active attempt (a run started with an explicit pairId, or the attempt row
+  // was lost): open one now rather than dropping the leg on the floor.
+  const attemptId = attempt ? attempt.recordId : await createAttempt(ctx, seriesId)
+  if (!attemptId) return
+
+  const existing = attempt ? normalizeLegResults(attempt.data.legResults) : []
+  const applied = applyLegResult(pairIds, existing, leg)
+  await ctx.tools.update<SeriesAttemptData>('seriesAttempt', attemptId, {
+    legResults: applied.legResults,
+    totalClicks: applied.totalClicks,
+    totalTimeMs: applied.totalTimeMs,
+    completed: applied.completed ? 1 : 0,
+    status: applied.status,
+  })
+}
+
+interface SeriesFinishInfo {
+  seriesId: string
+  legIndex: number
+  legCount: number
+  seriesCompleted: boolean
+  seriesTotalClicks: number
+  seriesTitle: string
+}
+
+/**
+ * Read the series standing to report on the finish screen. Called AFTER the fold,
+ * and safe to call again on a repeat finishAsyncRace because it derives everything
+ * from the stored legResults.
+ */
+async function readSeriesFinish(
+  ctx: ActionContext<Env>,
+  seriesId: string,
+  runId: string,
+): Promise<SeriesFinishInfo | null> {
+  const rec = await ctx.tools.get<SeriesData>('series', seriesId)
+  if (!rec.success) return null
+  const series = rec.data.record.data
+  const pairIds = normalizePairIds(series.pairIds)
+  const seriesTitle = typeof series.title === 'string' ? series.title : ''
+
+  // Query WITHOUT a status filter: folding the last leg flips the attempt to
+  // 'final', so an active-only lookup would miss the very attempt we just closed.
+  const q = await ctx.tools.query<SeriesAttemptData>('seriesAttempt', {
+    where: { subjectId: ctx.userId, seriesId },
+    limit: 50,
+  })
+  if (!q.success) return null
+
+  let owning: LegResult[] | null = null
+  let active: LegResult[] | null = null
+  for (const r of q.data.records) {
+    const rows = normalizeLegResults(r.data.legResults)
+    if (rows.some((l) => l.runId === runId)) {
+      owning = rows
+      break
+    }
+    if (r.data.status === 'active') active = rows
+  }
+  // A leg that was NOT recorded (forfeit / dnf) has no owning attempt — fall back
+  // to the still-active one so the screen can say which leg they are stuck on.
+  const rows = owning ?? active
+  if (!rows) return null
+
+  const progress = resolveSeriesLeg(pairIds, rows)
+  const idx = rows.findIndex((l) => l.runId === runId)
+  return {
+    seriesId,
+    legIndex: idx >= 0 ? idx : progress.legIndex,
+    legCount: progress.legCount,
+    seriesCompleted: progress.completed,
+    seriesTotalClicks: sumLegs(rows).totalClicks,
+    seriesTitle,
+  }
+}
+
 // ── startAsyncRace ────────────────────────────────────────────────────────
 
 export async function startAsyncRace(ctx: ActionContext<Env>): Promise<ActionResult> {
@@ -212,6 +421,7 @@ export async function startAsyncRace(ctx: ActionContext<Env>): Promise<ActionRes
 
   let pairId: string | null = null
   let seriesId: string | undefined
+  let leg: SeriesLegStart | null = null
   if (mode === 'daily') {
     const daily = await getOrCreateTodayDaily(ctx.env)
     pairId = daily?.pairId ?? null
@@ -220,9 +430,35 @@ export async function startAsyncRace(ctx: ActionContext<Env>): Promise<ActionRes
       typeof ctx.params.difficulty === 'string' ? ctx.params.difficulty : 'medium'
     pairId = await pickSoloPair(ctx, difficulty)
   } else {
-    pairId = typeof ctx.params.pairId === 'string' ? ctx.params.pairId : null
+    const explicitPairId = typeof ctx.params.pairId === 'string' ? ctx.params.pairId : null
     seriesId = typeof ctx.params.seriesId === 'string' ? ctx.params.seriesId : undefined
-    if (!pairId) return fail('startAsyncRace: series requires pairId')
+    if (explicitPairId) {
+      // Explicit-leg path, kept for backwards compatibility: the caller names the
+      // pair, we only look the series up for the "Leg N of M" chrome. The leg is
+      // still folded into the attempt when the run settles.
+      pairId = explicitPairId
+      if (seriesId) {
+        const rec = await ctx.tools.get<SeriesData>('series', seriesId)
+        if (rec.success) {
+          const pairIds = normalizePairIds(rec.data.record.data.pairIds)
+          const idx = pairIds.indexOf(explicitPairId)
+          leg = {
+            pairId: explicitPairId,
+            legIndex: idx >= 0 ? idx : 0,
+            legCount: pairIds.length,
+            seriesTitle:
+              typeof rec.data.record.data.title === 'string' ? rec.data.record.data.title : '',
+          }
+        }
+      }
+    } else {
+      // Normal path: the SERVER decides which leg comes next from the caller's
+      // attempt, so the client only ever has to pass the seriesId.
+      if (!seriesId) return fail('startAsyncRace: series requires seriesId')
+      leg = await startSeriesLeg(ctx, seriesId)
+      if (!leg) return fail('startAsyncRace: series not found or has no legs')
+      pairId = leg.pairId
+    }
   }
   if (!pairId) return fail('startAsyncRace: no eligible pair found')
 
@@ -260,6 +496,10 @@ export async function startAsyncRace(ctx: ActionContext<Env>): Promise<ActionRes
     pairId,
     startTitle: pair.startTitle,
     targetTitle: pair.targetTitle,
+    ...(seriesId ? { seriesId } : {}),
+    ...(leg
+      ? { legIndex: leg.legIndex, legCount: leg.legCount, seriesTitle: leg.seriesTitle }
+      : {}),
   }
   return ok(result)
 }
@@ -393,6 +633,15 @@ export async function finishAsyncRace(ctx: ActionContext<Env>): Promise<ActionRe
     await finalizeRun(ctx, runId, run, pair, { reached: reachedFromPath, forfeit: false, timeMs })
   }
 
+  // Series standing for the finish screen ("Leg 3 of 5", running total, whether a
+  // next leg exists). Read AFTER the finalize above so the leg just played is
+  // already folded in; derived from stored legResults, so a repeat finish call
+  // reports the same numbers.
+  const series =
+    run.context === 'series' && typeof run.seriesId === 'string' && run.seriesId
+      ? await readSeriesFinish(ctx, run.seriesId, runId)
+      : null
+
   const par = solution.par
   const result: FinishAsyncResult = {
     clicks,
@@ -403,6 +652,16 @@ export async function finishAsyncRace(ctx: ActionContext<Env>): Promise<ActionRe
     reached,
     // Strictly fewer clicks than par = beat it; clicks === par is meeting par, not beating.
     beatPar: reached && clicks < par,
+    ...(series
+      ? {
+          seriesId: series.seriesId,
+          legIndex: series.legIndex,
+          legCount: series.legCount,
+          seriesCompleted: series.seriesCompleted,
+          seriesTotalClicks: series.seriesTotalClicks,
+          seriesTitle: series.seriesTitle,
+        }
+      : {}),
   }
   return ok(result)
 }
@@ -463,6 +722,27 @@ async function finalizeRun(
   // be restarted) or a concurrent double-submit must not double-bump the public
   // histogram or inflate wins/totalRaces. The streak itself is day-set deduped, so
   // it is safe either way; we gate the non-idempotent bumps.
+  // Series bookkeeping lives HERE, not in finishAsyncRace: finalizeRun is the one
+  // funnel every settled run passes through exactly once (it is the active->final
+  // transition; submitAsyncMove auto-finalizes on reach and a later explicit
+  // finishAsyncRace sees status 'final' and skips it). applyLegResult is still
+  // idempotent on runId so a concurrent double-finalize cannot double-count.
+  //
+  // Only a REACHED leg is folded. A forfeit/dnf leaves the attempt untouched, so
+  // the gauntlet re-serves the same leg next time instead of banking a leg the
+  // player never actually solved into the cumulative-clicks total.
+  if (run.context === 'series' && opts.reached) {
+    const seriesId = typeof run.seriesId === 'string' ? run.seriesId : ''
+    if (seriesId) {
+      await foldSeriesLeg(ctx, seriesId, {
+        pairId: run.pairId,
+        runId,
+        clicks,
+        timeMs: opts.timeMs,
+      })
+    }
+  }
+
   if (run.context === 'daily' && opts.reached) {
     const today = utcDateString()
     if (await isFirstDailyCompletionToday(ctx, today, runId)) {

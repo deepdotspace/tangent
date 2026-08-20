@@ -61,6 +61,10 @@ export interface AsyncRace {
   startMs: number
   result: FinishAsyncRaceResult | null
   parPath: string[]
+  /** Series only: which leg of the gauntlet the server handed out (zero-based). */
+  legIndex: number | null
+  legCount: number | null
+  seriesTitle: string | null
   hop: (title: string) => void
   forfeit: () => void
 }
@@ -88,6 +92,11 @@ export function useAsyncRace(opts: AsyncRaceOptions): AsyncRace {
   const [oneAway, setOneAway] = useState(false)
   const [startMs, setStartMs] = useState(0)
   const [result, setResult] = useState<FinishAsyncRaceResult | null>(null)
+  // Series only: the leg the server resolved for this run. The client never
+  // chooses a leg — it just renders the one it was given.
+  const [legIndex, setLegIndex] = useState<number | null>(null)
+  const [legCount, setLegCount] = useState<number | null>(null)
+  const [seriesTitle, setSeriesTitle] = useState<string | null>(null)
   const [article, setArticle] = useState<AsyncArticle>({
     title: '', cat: '', loading: true,
   })
@@ -134,6 +143,9 @@ export function useAsyncRace(opts: AsyncRaceOptions): AsyncRace {
         setCurrentTitle(res.data.startTitle)
         setPath([res.data.startTitle])
         setStartMs(Date.now())
+        setLegIndex(typeof res.data.legIndex === 'number' ? res.data.legIndex : null)
+        setLegCount(typeof res.data.legCount === 'number' ? res.data.legCount : null)
+        setSeriesTitle(res.data.seriesTitle ?? null)
         setPhase('racing')
         void loadArticle(res.data.startTitle, false)
         return
@@ -282,6 +294,9 @@ export function useAsyncRace(opts: AsyncRaceOptions): AsyncRace {
     startMs,
     result,
     parPath,
+    legIndex,
+    legCount,
+    seriesTitle,
     hop,
     forfeit,
   }

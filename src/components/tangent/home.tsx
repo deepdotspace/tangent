@@ -149,6 +149,8 @@ export interface ModeTile {
   fg: string
   /** Optional corner badge, e.g. "Beta". */
   badge?: string
+  /** Built but not playable yet: shown, labelled, and not navigable. */
+  comingSoon?: boolean
 }
 
 export const MODE_TILES: ModeTile[] = [
@@ -157,7 +159,10 @@ export const MODE_TILES: ModeTile[] = [
   { id: 'ranked', icon: '◆', name: 'Ranked', desc: '1v1 duel. Skill rating and tiers.', bg: '#191634', fg: '#fff', badge: 'Beta' },
   { id: 'series', icon: '⛓', name: 'Series', desc: 'A themed gauntlet of five lines.', bg: 'var(--cyan)', fg: '#0a3e40' },
   { id: 'solo', icon: '◐', name: 'Solo', desc: 'Practice a curated line. You versus the par.', bg: 'var(--lime)', fg: '#2a4d00' },
-  { id: 'private', icon: '🔑', name: 'Private room', desc: 'Share a code. Friends, no signup.', bg: 'var(--sun)', fg: '#5b4a00' },
+  // Private rooms have no server side yet (the matchmaker only answers quick /
+  // chaos / ranked), so the tile is shown and labelled rather than leading the
+  // player into the "could not find a room" screen.
+  { id: 'private', icon: '🔑', name: 'Private room', desc: 'Race friends in a room of your own.', bg: 'var(--sun)', fg: '#5b4a00', badge: 'Coming soon', comingSoon: true },
 ]
 
 export function ModeGrid({ onSelect }: { onSelect: (id: Mode | 'solo') => void }) {
@@ -167,14 +172,30 @@ export function ModeGrid({ onSelect }: { onSelect: (id: Mode | 'solo') => void }
         {MODE_TILES.map((m) => (
           <button
             key={m.id}
-            onClick={() => onSelect(m.id)}
-            className="tg-lift tg-press"
+            onClick={m.comingSoon ? undefined : () => onSelect(m.id)}
+            aria-disabled={m.comingSoon || undefined}
+            className={m.comingSoon ? undefined : 'tg-lift tg-press'}
             style={{
-              textAlign: 'left', border: 'none', cursor: 'pointer', borderRadius: 20, padding: 18,
+              textAlign: 'left', border: 'none', cursor: m.comingSoon ? 'default' : 'pointer', borderRadius: 20, padding: 18,
               background: m.bg, color: m.fg, position: 'relative', overflow: 'hidden', minHeight: 128,
               display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+              // Readable, obviously inactive: the tile keeps its colour so the
+              // mode still reads as part of the set, just visibly not yet live.
+              opacity: m.comingSoon ? 0.55 : 1,
             }}
           >
+            {m.badge ? (
+              <span
+                style={{
+                  position: 'absolute', top: 12, right: 12, fontFamily: FONT.mono, fontSize: 9,
+                  fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  padding: '3px 8px', borderRadius: 999, background: 'rgba(255,255,255,.22)',
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.35)', color: m.fg,
+                }}
+              >
+                {m.badge}
+              </span>
+            ) : null}
             <span style={{ fontSize: 26 }}>{m.icon}</span>
             <span>
               <span style={{ display: 'block', fontFamily: FONT.display, fontWeight: 700, fontSize: 19 }}>{m.name}</span>

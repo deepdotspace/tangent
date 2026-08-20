@@ -52,6 +52,12 @@ export interface StartAsyncRaceResult {
   pairId: string
   startTitle: string
   targetTitle: string
+  // Series only: the server resolves which leg of the gauntlet this run is.
+  seriesId?: string
+  /** Zero-based; display as `legIndex + 1`. */
+  legIndex?: number
+  legCount?: number
+  seriesTitle?: string
 }
 
 export interface SubmitAsyncMoveParams {
@@ -87,6 +93,15 @@ export interface FinishAsyncRaceResult {
   examplePaths: ExamplePathNode[][]
   reached: boolean
   beatPar: boolean
+  // Series only: enough to show "Leg 3 of 5", the running total, and whether the
+  // gauntlet is finished. Starting another series run advances to the next leg.
+  seriesId?: string
+  /** Zero-based; display as `legIndex + 1`. */
+  legIndex?: number
+  legCount?: number
+  seriesCompleted?: boolean
+  seriesTotalClicks?: number
+  seriesTitle?: string
 }
 
 // ── Live race (AppGameRoom gameState) ────────────────────────────────────

@@ -5,7 +5,7 @@
  */
 
 import { useNavigate } from 'react-router-dom'
-import { LightScreen, TopBar, ActivityRibbon, DailyHero, ModeGrid, type TickerItem } from '../components/tangent'
+import { LightScreen, TopBar, ActivityRibbon, DailyHero, ModeGrid, MODE_TILES, type TickerItem } from '../components/tangent'
 import {
   DEMO_DAILY,
   useDailyChallenge,
@@ -43,6 +43,9 @@ export default function HomePage() {
   }
 
   function onSelectMode(id: Mode | 'solo') {
+    // The grid already renders unplayable modes as non-navigating; this is the
+    // second gate so no future caller can route into one.
+    if (MODE_TILES.some((t) => t.id === id && t.comingSoon)) return
     if (id === 'series') return navigate('/series')
     if (id === 'solo') return navigate('/solo')
     navigate(`/race?mode=${id}`)

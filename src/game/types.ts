@@ -154,6 +154,13 @@ export interface StartAsyncResult {
   pairId: string
   startTitle: string
   targetTitle: string
+  // Series mode only (optional so daily/solo results are unchanged). The server
+  // resolves WHICH leg of the gauntlet this run is; the client just renders it.
+  seriesId?: string
+  /** Zero-based index of the leg being played — display as `legIndex + 1`. */
+  legIndex?: number
+  legCount?: number
+  seriesTitle?: string
 }
 
 export type SubmitMoveResult =
@@ -172,4 +179,14 @@ export interface FinishAsyncResult {
   examplePaths: Array<Array<{ title: string; pageId: number | null }>>
   reached: boolean
   beatPar: boolean
+  // Series mode only (optional). Lets the finish screen show "Leg 3 of 5", the
+  // running total, and a "Next leg" action — the next leg is resolved server-side
+  // by starting another series run with the same seriesId.
+  seriesId?: string
+  /** Zero-based index of the leg just played — display as `legIndex + 1`. */
+  legIndex?: number
+  legCount?: number
+  seriesCompleted?: boolean
+  seriesTotalClicks?: number
+  seriesTitle?: string
 }

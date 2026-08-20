@@ -6,7 +6,7 @@
  * server and fall back to the self-contained demo so the screen always works.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   LightScreen,
@@ -37,12 +37,16 @@ import {
   guestDisplayName,
   useGuestId,
   type Difficulty,
+  type FinishAsyncRaceResult,
   type GameState,
   type LiveRace,
   type Mode,
 } from '../game/client'
 
-const VALID_MODES: Mode[] = ['daily', 'quick', 'chaos', 'ranked', 'series', 'private', 'solo']
+// `private` is deliberately absent: there is no server side for private rooms
+// yet (the matchmaker rejects the mode), so a hand-typed or bookmarked
+// `?mode=private` falls back to the daily instead of reaching a dead end.
+const VALID_MODES: Mode[] = ['daily', 'quick', 'chaos', 'ranked', 'series', 'solo']
 const RIVAL_PALETTE = ['#16cfd6', '#ffce2e', '#8b5cf6', '#8df03a', '#ff5a3c', '#4b5cff']
 
 interface ModeMeta {
@@ -121,6 +125,14 @@ function AsyncRaceInner({
     return () => clearInterval(id)
   }, [race.phase])
 
+  // Stable across the par-ghost ticks so the memoised article pane is not
+  // re-rendered (and its DOM rebuilt) once a second while the player reads.
+  const hop = race.hop
+  const onHop = useCallback((t: string) => {
+    setCoach(false)
+    hop(t)
+  }, [hop])
+
   if (race.phase === 'starting') {
     return (
       <LightScreen style={{ display: 'grid', placeItems: 'center' }}>
@@ -151,6 +163,10 @@ function AsyncRaceInner({
       mode === 'daily'
         ? dailyShareText({ number: daily.number ?? DEMO_DAILY.number, start: race.startTitle, target: race.targetTitle, clicks: r.clicks, par: r.par, streak })
         : lineShareText(race.startTitle, race.targetTitle, r.clicks)
+    // A series finish is a LEG finish. Restarting the flow starts another series
+    // run with the same seriesId, and the server hands out the next leg — so the
+    // existing restart is literally the "next leg" action.
+    const series = seriesStanding(mode, r)
     return (
       <FinishView
         yourTitles={race.path}
@@ -158,6 +174,7 @@ function AsyncRaceInner({
         clicks={r.clicks}
         par={r.par}
         reached={r.reached}
+        note={series?.note}
         shareText={shareText}
         shareLabel={copied ? 'Copied' : 'Share your line'}
         onCopyShare={async () => {
@@ -166,6 +183,7 @@ function AsyncRaceInner({
           setTimeout(() => setCopied(false), 1800)
         }}
         onRestart={onRestart}
+        restartLabel={series?.restartLabel}
         onHome={() => navigate('/home')}
         showDailyStats={mode === 'daily'}
         onDailyStats={() => navigate('/daily')}
@@ -179,10 +197,15 @@ function AsyncRaceInner({
     { id: 'par-ghost', name: 'the par line', color: 'var(--indigo)', ghost: true, clicks: Math.round((ghostProg / 100) * parForProgress), progress: ghostProg },
   ]
 
+  const modeLabel =
+    mode === 'series' && race.legCount
+      ? `${meta.label} · leg ${(race.legIndex ?? 0) + 1} of ${race.legCount}`
+      : meta.label
+
   return (
     <RaceStage
       raceBg={meta.bg}
-      modeLabel={meta.label}
+      modeLabel={modeLabel}
       modeColor={meta.color}
       onBack={() => { race.forfeit(); navigate('/home') }}
       onGiveUp={() => { race.forfeit(); navigate('/home') }}
@@ -198,7 +221,7 @@ function AsyncRaceInner({
       charges={0}
       onPowerup={() => {}}
       article={race.article}
-      onHop={(t) => { setCoach(false); race.hop(t) }}
+      onHop={onHop}
       presenceLabel="On this line"
       youProgress={youProgress}
       rivals={rivals}
@@ -290,10 +313,14 @@ function LiveStage({ live, mode }: { live: LiveRace; mode: Mode }) {
     if (state.phase === 'finished' && startMs && !finishMs) setFinishMs(Date.now())
   }, [state.phase, startMs, finishMs])
 
-  const onHop = (to: string) => {
-    setMyPath((p) => (p.length ? [...p, to] : [state.startTitle ?? DEMO_DAILY.start, to]))
-    live.navigate(currentTitle, to)
-  }
+  // Stable between room ticks (the DO broadcasts at TICK_RATE), so the article
+  // pane keeps its DOM while the presence rail updates around it.
+  const liveNavigate = live.navigate
+  const startTitle = state.startTitle
+  const onHop = useCallback((to: string) => {
+    setMyPath((p) => (p.length ? [...p, to] : [startTitle ?? DEMO_DAILY.start, to]))
+    liveNavigate(currentTitle, to)
+  }, [liveNavigate, currentTitle, startTitle])
 
   // A dropped or never-opened socket (also when the room DO is gone) freezes the
   // live stage on "Get ready"; surface a reconnecting state with an exit instead.
@@ -405,6 +432,37 @@ function LiveStage({ live, mode }: { live: LiveRace; mode: Mode }) {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Series standing for the finish screen: where the player is in the gauntlet and
+ * what the primary button should do next. Returns null for every other mode so
+ * Daily / Solo keep their existing copy untouched.
+ */
+function seriesStanding(
+  mode: Mode,
+  r: FinishAsyncRaceResult,
+): { note: string; restartLabel: string } | null {
+  if (mode !== 'series' || !r.legCount) return null
+  const leg = (r.legIndex ?? 0) + 1
+  const total = r.seriesTotalClicks ?? r.clicks
+  // An unreached leg is never banked, so the server re-serves the same one.
+  if (!r.reached) {
+    return {
+      note: `Leg ${leg} of ${r.legCount} · not cleared`,
+      restartLabel: 'Try this leg again',
+    }
+  }
+  if (r.seriesCompleted) {
+    return {
+      note: `Gauntlet complete · ${total} clicks over ${r.legCount} lines`,
+      restartLabel: 'Run the gauntlet again',
+    }
+  }
+  return {
+    note: `Leg ${leg} of ${r.legCount} · ${total} clicks so far`,
+    restartLabel: 'Next leg',
+  }
+}
 
 function rivalRowsFromState(state: GameState, meId: string): RivalRow[] {
   return Object.entries(state.players)
